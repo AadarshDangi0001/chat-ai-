@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChatGPT Clone</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-[#1e1e1e] text-white font-sans">
+  <div class="relative flex h-screen overflow-hidden">
+    
+    <!-- Sidebar -->
+    <div id="sidebar"
+      class="w-64 bg-[#2a2a2a] p-4 overflow-y-auto fixed left-0 top-0 h-full transform -translate-x-full transition-transform duration-300 z-20 border-r border-[#3c3c3c] shadow-md">
+      <div class="flex justify-between items-center text-[#ccc] mb-4">
+        <h2 class="text-lg font-semibold tracking-wide">Repositories</h2>
+        <button onclick="toggleSidebar()" class="text-xl hover:text-red-400 transition">✖</button>
+      </div>
+      <button onclick="createNewRepo()"
+        class="w-full py-2 px-4 my-2 bg-[#3c3c3c] text-white rounded hover:bg-[#4a4a4a] transition">
+        + New Repo
+      </button>
+      <div id="repoList" class="mt-4 space-y-2 text-sm"></div>
+    </div>
+
+    <!-- Main Content -->
+    <div id="mainContent" class="flex-1 flex flex-col ml-0 w-full transition-all duration-300">
+      
+      <!-- Top Bar -->
+      <div class="p-4 bg-[#2a2a2a] flex justify-between items-center z-20 relative border-b border-[#3c3c3c] shadow">
+        <button onclick="toggleSidebar()" class="text-2xl text-[#ccc] hover:text-white">☰</button>
+        <h1 class="text-xl font-semibold text-[#ccc]">ChatGPT Clone</h1>
+        <div class="flex items-center space-x-4">
+          <div id="repoName"
+            class="cursor-pointer bg-[#3c3c3c] px-4 py-2 rounded hover:bg-[#4a4a4a] transition"
+            onclick="toggleRepoDropdown()"></div>
+          <div id="repoDropdown"
+            class="hidden absolute top-16 right-32 bg-[#2a2a2a] text-white rounded shadow-lg p-2 w-52 z-30 space-y-1 border border-[#3c3c3c]"></div>
+          <form action="/logout" method="post">
+            <button type="submit"
+              class="bg-[#444] px-4 py-2 rounded text-white hover:bg-[#555] transition">
+              Logout
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Chat Section -->
+      <div id="chatBox" class="flex-1 px-6 py-4 overflow-y-auto space-y-4">
+        <!-- Messages go here -->
+      </div>
+
+      <!-- Input Form -->
+      <form onsubmit="handleFormSubmit(event)" class="p-4 bg-[#2a2a2a] flex border-t border-[#3c3c3c]">
+        <input type="text" id="prompt"
+          class="flex-1 p-3 bg-[#1e1e1e] text-white border border-[#444] rounded focus:ring-2 focus:ring-[#555] outline-none placeholder-gray-400"
+          placeholder="Type your message..." required>
+        <button type="submit"
+          class="ml-2 px-5 py-2 bg-[#444] text-white rounded hover:bg-[#555] transition">
+          Send
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let repositories = JSON.parse(localStorage.getItem("repositories")) || [{ name: "Default Repo", chats: [] }];
+    let currentRepoIndex = 0;
+    let message;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      updateRepoName();
+      updateRepoList();
+      loadChat();
+    });
+
+    function handleFormSubmit(event) {
+      event.preventDefault();
+      const promptInput = document.getElementById('prompt');
+      message = promptInput.value.trim();
+      if (!message) return;
+
+      addMessage("user", message);
+
+      fetch('/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: message })
+      })
+        .then(res => res.json())
+        .then(data => {
+          addMessage("ai", data.response);
+        })
+        .catch(() => {
+          addMessage("ai", "Error fetching response");
+        });
+
+      promptInput.value = "";
+    }
+
+    function addMessage(sender, text) {
+      const chatBox = document.getElementById('chatBox');
+      let formattedText = text.includes("\n")
+        ? `<pre class='bg-[#2e2e2e] p-4 rounded whitespace-pre-wrap break-words shadow-sm'>${text}</pre>`
+        : `<p class="px-4 py-2">${text}</p>`;
+
+      const messageDiv = `<div class='max-w-3xl ${sender === "user" ? "ml-auto text-right bg-[#3a3a3a]" : "mr-auto text-left bg-[#2f2f2f]"} p-3 rounded-lg shadow-md'>${formattedText}</div>`;
+      chatBox.innerHTML += messageDiv;
+      chatBox.scrollTop = chatBox.scrollHeight;
+
+      repositories[currentRepoIndex].chats.push({ sender, text });
+      localStorage.setItem("repositories", JSON.stringify(repositories));
+    }
+
+    function loadChat() {
+      const chatBox = document.getElementById('chatBox');
+      chatBox.innerHTML = "";
+      if (!repositories.length || !repositories[currentRepoIndex]) {
+        chatBox.innerHTML = "<p class='text-gray-400 text-center'>No repository selected or available.</p>";
+        return;
+      }
+      repositories[currentRepoIndex].chats.forEach(chat => {
+        addMessage(chat.sender, chat.text);
+      });
+    }
+
+    function updateRepoList() {
+      const repoList = document.getElementById('repoList');
+      repoList.innerHTML = "";
+      repositories.forEach((repo, index) => {
+        repoList.innerHTML += `
+          <div class="flex justify-between items-center p-2 bg-[#3a3a3a] rounded hover:bg-[#4a4a4a] transition">
+            <button onclick='switchRepo(${index})' class="flex-1 text-left truncate">${repo.name}</button>
+            <button onclick='deleteRepo(${index})' class="text-red-400 ml-2 hover:text-red-500">✖</button>
+          </div>
+        `;
+      });
+    }
+
+    function createNewRepo() {
+      const repoName = prompt("Enter your repo name");
+      if (!repoName) {
+        alert("Repository name cannot be empty!");
+        return;
+      }
+      repositories.push({ name: repoName, chats: [] });
+      localStorage.setItem("repositories", JSON.stringify(repositories));
+      updateRepoList();
+    }
+
+    function switchRepo(index) {
+      currentRepoIndex = index;
+      updateRepoName();
+      loadChat();
+    }
+
+    function deleteRepo(index) {
+      repositories.splice(index, 1);
+      if (currentRepoIndex === index) currentRepoIndex = 0;
+      localStorage.setItem("repositories", JSON.stringify(repositories));
+      updateRepoList();
+      updateRepoName();
+      loadChat();
+    }
+
+    function updateRepoName() {
+      document.getElementById("repoName").innerText = repositories[currentRepoIndex]?.name || "Default Repo";
+    }
+
+    function toggleRepoDropdown() {
+      const dropdown = document.getElementById("repoDropdown");
+      dropdown.innerHTML = "";
+      if (!dropdown.classList.contains("hidden")) {
+        dropdown.classList.add("hidden");
+        return;
+      }
+      repositories.forEach((repo, index) => {
+        const item = document.createElement("div");
+        item.innerText = repo.name;
+        item.className = "p-2 hover:bg-[#444] rounded cursor-pointer";
+        item.onclick = () => {
+          switchRepo(index);
+          dropdown.classList.add("hidden");
+        };
+        dropdown.appendChild(item);
+      });
+      dropdown.classList.remove("hidden");
+    }
+
+    function toggleSidebar() {
+      const sidebar = document.getElementById("sidebar");
+      const mainContent = document.getElementById("mainContent");
+
+      sidebar.classList.toggle("-translate-x-full");
+      mainContent.style.marginLeft = sidebar.classList.contains("-translate-x-full") ? "0" : "256px";
+    }
+  </script>
+</body>
+</html>
